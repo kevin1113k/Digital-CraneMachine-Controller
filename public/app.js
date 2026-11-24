@@ -1,4 +1,4 @@
-/* 數位夾娃娃機 — 手機遙控 (協定見 docs/RemoteProtocol.md) */
+/* 數位夾娃娃機 — 手機遙控 (協定見 PROTOCOL.md) */
 'use strict';
 (() => {
   const $ = id => document.getElementById(id);
@@ -14,7 +14,7 @@
     returning: '回到出貨口', releasing: '放爪', idle: '',
   };
 
-  let ws = null, retryDelay = 500, connected = false, machineOnline = true;
+  let connected = false, machineOnline = true;
   let token = sessionStorage.getItem(TOKEN_KEY) || newToken();
   let mode = 'connect';          // connect | qr | play | result
   let myState = 'idle';          // idle | playing | dropping | retry
@@ -24,27 +24,77 @@
   let pingSent = 0, wakeLock = null;
 
   // ---------------------------------------------------------------- 連線
-  function wsUrl() {
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    return `${proto}://${location.host}/ws${machineId ? '?m=' + encodeURIComponent(machineId) : ''}`;
+  // 兩種傳輸方式，訊息格式完全相同 (見 PROTOCOL.md)：
+  //   relay：WebSocket 連 server.js 中繼 (或 Unity 區網伺服器)
+  //   mqtt ：網頁放在 GitHub Pages 等靜態網站時，經 MQTT broker 與機台溝通
+  const CFG = Object.assign({ transport: 'relay', defaultMachine: 'crane01' }, window.CRANE_CONFIG || {});
+  const MACHINE = machineId || CFG.defaultMachine;
+  let link = null;
+
+  function onLinkOpen() { connected = true; setDot('ok'); register(); }
+  function onLinkClose() {
+    connected = false; setDot('bad');
+    banner('連線中斷，重新連線中…');
   }
+  function onLinkText(text) { try { onMessage(JSON.parse(text)); } catch (err) { console.warn(err); } }
 
   function connect() {
     setDot('warn');
-    ws = new WebSocket(wsUrl());
-    ws.onopen = () => { connected = true; retryDelay = 500; setDot('ok'); register(); };
-    ws.onclose = () => {
-      connected = false; setDot('bad');
-      if (mode === 'connect') show('connect');
-      banner('連線中斷，重新連線中…');
-      setTimeout(connect, retryDelay);
-      retryDelay = Math.min(retryDelay * 2, 5000);
-    };
-    ws.onerror = () => {};
-    ws.onmessage = e => { try { onMessage(JSON.parse(e.data)); } catch (err) { console.warn(err); } };
+    link = CFG.transport === 'mqtt' ? mqttLink() : wsLink();
   }
 
-  function send(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
+  function wsLink() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const url = `${proto}://${location.host}/ws${machineId ? '?m=' + encodeURIComponent(machineId) : ''}`;
+    let ws, retryDelay = 500, closed = false;
+    (function open() {
+      ws = new WebSocket(url);
+      ws.onopen = () => { retryDelay = 500; onLinkOpen(); };
+      ws.onclose = () => {
+        onLinkClose();
+        if (!closed) setTimeout(open, retryDelay);
+        retryDelay = Math.min(retryDelay * 2, 5000);
+      };
+      ws.onerror = () => {};
+      ws.onmessage = e => onLinkText(e.data);
+    })();
+    return { send: text => { if (ws && ws.readyState === 1) ws.send(text); } };
+  }
+
+  function mqttLink() {
+    if (!window.mqtt) { banner('無法載入連線元件，請重新整理'); return { send() {} }; }
+    // 每支手機一個隨機 id，機台用它回訊息給你
+    const cid = sessionStorage.getItem('crane.cid') || ('p' + Array.from(crypto.getRandomValues(new Uint8Array(8)), b => b.toString(36).padStart(2, '0')).join('').slice(0, 12));
+    sessionStorage.setItem('crane.cid', cid);
+    const base = `${CFG.topicRoot}/${MACHINE}`;
+    const up = `${base}/up/${cid}`;
+    const client = window.mqtt.connect(CFG.mqttUrl, {
+      clientId: cid + '-' + Math.random().toString(36).slice(2, 6),
+      clean: true,
+      keepalive: 20,
+      reconnectPeriod: 1000,
+      connectTimeout: 8000,
+      will: { topic: up, payload: '{"type":"__bye"}', qos: 0, retain: false },
+    });
+    client.on('connect', () => {
+      client.subscribe([`${base}/down/${cid}`, `${base}/down/all`, `${base}/status`], { qos: 0 }, () => {
+        client.publish(up, '{"type":"__hello"}');
+        onLinkOpen();
+      });
+    });
+    client.on('message', (topic, payload) => {
+      const text = payload.toString();
+      if (topic.endsWith('/status')) {
+        // 機台上下線 (retained)，轉成和 relay 一樣的訊息
+        onMessage({ type: 'relay', machine: text === 'online' ? 'online' : 'offline', machineId: MACHINE });
+      } else onLinkText(text);
+    });
+    client.on('offline', onLinkClose);
+    client.on('error', () => {});
+    return { send: text => { if (client.connected) client.publish(up, text); } };
+  }
+
+  function send(obj) { if (link) link.send(JSON.stringify(obj)); }
   function register() { send({ type: 'register', token }); }
 
   function newToken() {

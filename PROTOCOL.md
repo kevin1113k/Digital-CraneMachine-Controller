@@ -69,7 +69,8 @@ ws.send(JSON.stringify({ type: 'drop' }));
 
 | 方式 | 手機網址 | 說明 |
 |---|---|---|
-| **雲端中繼（正式）** | `https://<中繼網域>/?m=<機台ID>` | 手機用行動網路即可。網頁與 WebSocket (`wss://<中繼網域>/ws?m=<機台ID>`) 都由中繼提供，PC 主動連出。實作在 `WebController/` |
+| **GitHub Pages + MQTT（目前使用）** | `https://kevin1113k.github.io/Digital-CraneMachine-Controller/?m=<機台ID>` | 主題見下方「MQTT 主題」 |
+| **自架中繼** | `https://<中繼網域>/?m=<機台ID>` | 手機用行動網路即可。網頁與 WebSocket (`wss://<中繼網域>/ws?m=<機台ID>`) 都由中繼提供，PC 主動連出。實作在 `WebController/` |
 | 區網直連（備用） | `http://<PC_IP>:8765/` | 手機需與 PC 同網段 |
 
 兩種方式的訊息格式完全相同，中繼只轉送不改內容。只有中繼會額外送：
@@ -79,3 +80,16 @@ ws.send(JSON.stringify({ type: 'drop' }));
 | `relay` | `machine`, `machineId` | `online` / `offline`：機台 PC 是否連上中繼。收到 `online` 時手機應重新送一次 `register` |
 
 `input` 的 `x`、`y` 為類比值 (-1..1)，推越多移動越快；Unity 設定 `joystickAnalog = false` 時會量化成固定速度 8 方向。
+
+## MQTT 主題
+
+base = `{mqttTopicRoot}/{機台ID}`，QoS 0。
+
+| 主題 | 方向 | 內容 |
+|---|---|---|
+| `{base}/up/{cid}` | 手機 → 機台 | 上表的手機訊息原文。連上時送 `{"type":"__hello"}`；遺囑設為 `{"type":"__bye"}` |
+| `{base}/down/{cid}` | 機台 → 該手機 | 上表的 PC 訊息原文 |
+| `{base}/down/all` | 機台 → 所有手機 | 廣播 |
+| `{base}/status` | 機台 → 所有手機 | retained，`online` / `offline`（機台遺囑） |
+
+`cid` 為每支手機的隨機 ID（英數，≤ 64 字）。

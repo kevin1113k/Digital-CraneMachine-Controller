@@ -14,5 +14,8 @@
   "dependencies": {
     "qrcode-generator": "^1.5.2",
     "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "mqtt": "^5.16.1"
   }
 }

@@ -28,9 +28,6 @@ const ID_RE = /^[A-Za-z0-9_-]{1,32}$/;
 if (!MACHINE_KEY) console.warn('[relay] 警告：未設定 MACHINE_KEY，任何人都能冒充機台。正式部署請務必設定。');
 
 // ------------------------------------------------------------------ HTTP (靜態網頁)
-const STATIC = {
-  '/vendor/qrcode.js': path.join(__dirname, 'node_modules', 'qrcode-generator', 'qrcode.js'),
-};
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json; charset=utf-8', '.webmanifest': 'application/manifest+json' };
 
@@ -41,12 +38,16 @@ const server = http.createServer((req, res) => {
     const list = [...machines.keys()].map(id => ({ id, phones: machines.get(id).phones.size }));
     return send(res, 200, 'application/json', JSON.stringify(list));
   }
-  let file = STATIC[url.pathname];
-  if (!file) {
-    const p = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname);
-    file = path.normalize(path.join(PUBLIC_DIR, p));
-    if (!file.startsWith(PUBLIC_DIR)) return send(res, 403, 'text/plain', 'forbidden');
+  if (url.pathname === '/config.js') {
+    // 由本伺服器提供網頁時，一律走 relay (WebSocket 直連本中繼)
+    return fs.readFile(path.join(PUBLIC_DIR, 'config.js'), 'utf8', (err, js) =>
+      send(res, 200, MIME['.js'], (err ? 'window.CRANE_CONFIG={};' : js) + `
+window.CRANE_CONFIG.transport='relay';window.CRANE_CONFIG.defaultMachine=${JSON.stringify(DEFAULT_MACHINE)};
+`));
   }
+  const p = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname);
+  const file = path.normalize(path.join(PUBLIC_DIR, p));
+  if (!file.startsWith(PUBLIC_DIR)) return send(res, 403, 'text/plain', 'forbidden');
   fs.readFile(file, (err, data) => {
     if (err) return send(res, 404, 'text/plain', 'not found');
     send(res, 200, MIME[path.extname(file)] || 'application/octet-stream', data,

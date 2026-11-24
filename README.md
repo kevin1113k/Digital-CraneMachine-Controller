@@ -1,15 +1,33 @@
-# 數位夾娃娃機 — 手機遙控 + 雲端中繼
+# 數位夾娃娃機 — 手機遙控
 
 手機用 **4G / 5G / 任何 Wi-Fi** 都能玩，不需要和機台 PC 同一個網路。
 
+## 兩種架設方式
+
+**A. GitHub Pages + MQTT（目前使用，免費、免架伺服器）**
+
 ```
-手機瀏覽器 ──HTTPS / WSS──►  雲端中繼 (本專案 server.js)  ◄──WSS (PC 主動連出)──  機台 PC (Unity)
+手機瀏覽器 (GitHub Pages 網頁) ──WSS──►  MQTT broker (broker.emqx.io)  ◄──WSS──  機台 PC (Unity)
 ```
 
-- 中繼同時提供手機網頁（`public/`）
-- PC 是主動連出去，現場**不用開 port、不用設路由器、不用固定 IP**，只要 PC 能上網
-- 中繼只轉送訊息，遊戲邏輯都在 Unity；協定見 [PROTOCOL.md](PROTOCOL.md)
-- 支援多台機台：每台用不同的機台 ID（手機網址 `?m=<機台ID>`）
+- 手機網址：`https://kevin1113k.github.io/Digital-CraneMachine-Controller/?m=crane01`
+- 設定在 `public/config.js`；Unity `crane_settings.json` 的 `mqttUrl`、`mqttTopicRoot`、`machineId` 必須一致
+- PC 主動連出，現場不用開 port
+
+**B. 自架中繼 server.js（需要 Node.js 主機，例如 Render）**
+
+```
+手機瀏覽器 ──HTTPS / WSS──►  server.js  ◄──WSS──  機台 PC (Unity)
+```
+
+- 由 server.js 提供網頁時會自動改走中繼，不需改 config.js
+- 有機台金鑰保護，延遲較低、不依賴第三方服務
+
+兩種方式的訊息格式相同，協定見 [PROTOCOL.md](PROTOCOL.md)。支援多台機台：每台用不同的機台 ID（網址 `?m=<機台ID>`）。
+
+> **關於公開 MQTT broker**：`broker.emqx.io` 是公開測試服務，任何知道主題名稱的人都看得到訊息，也不保證穩定。
+> 遊戲開始仍需在機台實體掃 QR，所以無法遠端白玩；但正式長期營運建議改用私人 broker（例如 EMQX Cloud / HiveMQ Cloud 免費方案，
+> 選亞洲機房延遲較低，填入 `mqttUrl`、`mqttUser`、`mqttPassword`）或方式 B。
 
 ## 手機操作
 
@@ -18,7 +36,19 @@
 3. 掃描成功後變成遙控器：**蘑菇頭搖桿**（推越多走越快）、**下爪**、**收爪**
 4. 上方選「我站在機台的 正面/右側/背面/左側」，搖桿方向會跟著你看到的方向走
 
-## 本機測試
+## 更新 GitHub Pages
+
+改完 `public/` 裡的檔案後：
+
+```bash
+git add -A
+git commit -m "說明"
+git push
+```
+
+約 1 分鐘後 Pages 會自動更新。
+
+## 本機測試 (方式 B)
 
 ```bash
 cd WebController
@@ -47,7 +77,7 @@ cloudflared tunnel --url http://localhost:8080
 # Unity relayUrl 可維持 ws://localhost:8080/machine
 ```
 
-## 正式部署
+## 部署方式 B
 
 任何支援 WebSocket 的 Node.js 主機都可以（Render、Railway、Fly.io、自己的 VPS…）。
 
@@ -77,7 +107,7 @@ docker run -d -p 8080:8080 -e MACHINE_KEY=換成長隨機字串 --restart unless
 
 ## 延遲
 
-行動網路經雲端中繼，按鍵延遲約 50–150 ms（右上角會顯示 ping）。
+經公開 MQTT broker 單程約 150–200 ms；自架中繼或亞洲機房的私人 broker 約 50–100 ms（右上角會顯示 ping 來回時間）。
 搖桿按住時每 50 ms 送一次狀態；PC 端 `inputTimeout`（預設 0.6 秒）沒收到就自動停止，網路斷掉不會暴衝。
 
 ## 檔案
@@ -85,7 +115,10 @@ docker run -d -p 8080:8080 -e MACHINE_KEY=換成長隨機字串 --restart unless
 ```
 server.js          中繼伺服器 + 靜態網頁
 public/index.html  手機頁面
-public/app.js      連線、QR、蘑菇頭搖桿、按鈕
+public/app.js      連線 (MQTT / 中繼)、QR、蘑菇頭搖桿、按鈕
+public/config.js   連線設定
+public/vendor/     qrcode-generator (MIT)、mqtt.js (MIT)
+index.html         GitHub Pages 入口 (導向 public/)
 public/style.css   樣式
 test/relay-test.js 整合測試
 ```
