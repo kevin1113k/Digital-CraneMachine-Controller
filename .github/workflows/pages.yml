@@ -28,6 +28,10 @@ jobs:
         run: |
           mkdir _site
           cp -r public index.html .nojekyll _site/
+          BUILD=${GITHUB_SHA::7}
+          sed -i "s/__BUILD__/$BUILD/g" _site/public/index.html _site/public/app.js
+          echo "{\"build\":\"$BUILD\"}" > _site/public/version.json
+          grep -c "$BUILD" _site/public/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

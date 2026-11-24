@@ -1,6 +1,22 @@
 /* 數位夾娃娃機 — 手機遙控 (協定見 PROTOCOL.md) */
 'use strict';
 (() => {
+  // ---- 自動更新：部署時 __BUILD__ 會被換成版本號 (見 .github/workflows/pages.yml)
+  // GitHub Pages 會讓瀏覽器快取網頁 10 分鐘；開啟時比對伺服器版本，舊了就帶新網址重新載入
+  const BUILD = '__BUILD__';
+  if (!BUILD.startsWith('__')) {
+    fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then(v => {
+        if (!v || !v.build || v.build === BUILD) return;
+        const u = new URL(location.href);
+        if (u.searchParams.get('_v') === v.build) return;   // 已嘗試過，避免無限重整
+        u.searchParams.set('_v', v.build);
+        location.replace(u.toString());
+      })
+      .catch(() => {});
+  }
+
   const $ = id => document.getElementById(id);
   const params = new URLSearchParams(location.search);
   const machineId = params.get('m') || '';
