@@ -5,7 +5,6 @@
   const params = new URLSearchParams(location.search);
   const machineId = params.get('m') || '';
   const TOKEN_KEY = 'crane.token.' + (machineId || 'default');
-  const SIDE_KEY = 'crane.side';
   const SEND_INTERVAL = 50;        // 搖桿按住時每 50ms 送一次 (PC 端超時即放開)
   const DEADZONE = 0.15;
 
@@ -19,7 +18,7 @@
   let mode = 'connect';          // connect | qr | play | result
   let myState = 'idle';          // idle | playing | dropping | retry
   let timeLeft = 0, timeStamp = 0, expireAt = 0;
-  let side = Number(localStorage.getItem(SIDE_KEY) || 0);
+  let clawPhase = 'idle';         // Unity 送來的爪子動作
   let stick = { x: 0, y: 0, active: false }, lastSent = { x: 0, y: 0 }, lastSendTime = 0;
   let pingSent = 0, wakeLock = null;
 
@@ -131,11 +130,12 @@
         break;
       case 'start':
         myState = 'playing';
+        clawPhase = 'idle';
         setTime(m.timeLeft);
         $('roundBadge').textContent = `第 ${m.round || 1} 次`;
         $('roundBadge').classList.toggle('hide', !(m.round > 1 || m.guarantee));
         $('retry').classList.add('hide');
-        setPhase('移動爪子，對準後按下爪');
+        setPhase('移動爪子，對準後按「下爪」');
         setPlayUi();
         show('play');
         vibrate([30, 40, 30]);
@@ -145,6 +145,7 @@
         setTime(m.timeLeft);
         break;
       case 'phase':
+        clawPhase = m.phase;
         if (m.phase !== 'idle') myState = 'dropping';
         setPhase(PHASE_TEXT[m.phase] ?? m.phase);
         if (m.phase === 'closing') vibrate(40);
@@ -197,12 +198,17 @@
     $('qr').innerHTML = qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
   }
 
+  /** 同一顆按鈕：遊戲中 = 下爪；爪子開爪/下降中 = 收爪；其他時候停用 */
+  function canGrab() { return myState === 'dropping' && (clawPhase === 'opening' || clawPhase === 'descending'); }
+
   function setPlayUi() {
     const canMove = myState === 'playing';
     $('stick').classList.toggle('disabled', !canMove);
-    $('btnDrop').disabled = !canMove;
-    $('btnGrab').disabled = myState !== 'dropping';
-    $('btnGrab').classList.toggle('hot', myState === 'dropping');
+    const btn = $('btnAction');
+    const grab = canGrab();
+    btn.disabled = !(canMove || grab);
+    btn.classList.toggle('grab', grab);
+    $('btnLabel').textContent = grab ? '收爪' : '下爪';
     if (!canMove) releaseStick();
   }
 
@@ -256,8 +262,11 @@
   function moveStick(e) {
     const r = stickEl.getBoundingClientRect();
     const radius = r.width / 2;
-    let dx = (e.clientX - (r.left + radius)) / radius;
-    let dy = (e.clientY - (r.top + radius)) / radius;
+    const sx = (e.clientX - (r.left + r.width / 2)) / radius;
+    const sy = (e.clientY - (r.top + r.height / 2)) / radius;
+    // 直拿手機時介面轉了 90°，把螢幕座標換回介面座標
+    let dx = rotated ? sy : sx;
+    let dy = rotated ? -sx : sy;
     const len = Math.hypot(dx, dy);
     if (len > 1) { dx /= len; dy /= len; }
     const travel = radius * 0.58;
@@ -299,7 +308,7 @@
 
   function maybeSend(force) {
     if (myState !== 'playing' && !force) return;
-    send({ type: 'input', x: stick.x, y: stick.y, side });
+    send({ type: 'input', x: stick.x, y: stick.y });
     lastSent = { x: stick.x, y: stick.y };
     lastSendTime = performance.now();
   }
@@ -307,7 +316,7 @@
   // 按住期間持續送 (PC 端超過時間沒收到會自動停止，避免斷線暴衝)
   setInterval(() => {
     if (myState === 'playing' && (stick.x !== 0 || stick.y !== 0)) {
-      send({ type: 'input', x: stick.x, y: stick.y, side });
+      send({ type: 'input', x: stick.x, y: stick.y });
       lastSent = { x: stick.x, y: stick.y };
       lastSendTime = performance.now();
     }
@@ -326,8 +335,19 @@
     });
     ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => el.addEventListener(t, () => el.classList.remove('pressed')));
   }
-  press($('btnDrop'), () => { releaseStick(); send({ type: 'drop' }); });
-  press($('btnGrab'), () => send({ type: 'grab' }));
+  press($('btnAction'), () => {
+    if (myState === 'playing') {
+      releaseStick();
+      myState = 'dropping';          // 先在本機鎖住，等 Unity 回 phase
+      clawPhase = 'opening';
+      setPlayUi();
+      send({ type: 'drop' });
+    } else if (canGrab()) {
+      send({ type: 'grab' });
+      clawPhase = 'closing';
+      setPlayUi();
+    }
+  });
   $('btnAgain').addEventListener('click', () => {
     token = newToken();
     myState = 'idle';
@@ -335,18 +355,30 @@
     register();
   });
 
-  // 站的位置 (決定搖桿方向)
-  const seg = $('sideSeg');
-  function renderSide() { seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', Number(b.dataset.side) === side)); }
-  seg.addEventListener('click', e => {
-    const b = e.target.closest('button');
-    if (!b) return;
-    side = Number(b.dataset.side);
-    localStorage.setItem(SIDE_KEY, side);
-    renderSide();
-    vibrate(10);
-  });
-  renderSide();
+  // ---------------------------------------------------------------- 橫式版面
+  // 永遠用橫式排版。手機直拿 (或鎖定直向) 時，把整個介面順時針轉 90°，使用者橫拿即可。
+  let rotated = false;
+  function layout() {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    rotated = vh > vw;
+    const W = rotated ? vh : vw, H = rotated ? vw : vh;
+    const app = $('app');
+    app.style.setProperty('--W', W + 'px');
+    app.style.setProperty('--H', H + 'px');
+    app.style.transform = rotated ? `translateX(${vw}px) rotate(90deg)` : '';
+  }
+  window.addEventListener('resize', () => { releaseStick(); layout(); });
+  window.addEventListener('orientationchange', () => setTimeout(layout, 100));
+  layout();
+  // Android：第一次觸控時嘗試全螢幕 + 鎖定橫向 (iOS 不支援，會自動略過)
+  document.addEventListener('pointerdown', async function lockOnce() {
+    document.removeEventListener('pointerdown', lockOnce, true);
+    try {
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+      if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape');
+    } catch {}
+    layout();
+  }, true);
 
   // ---------------------------------------------------------------- 雜項
   function vibrate(p) { try { navigator.vibrate && navigator.vibrate(p); } catch {} }
