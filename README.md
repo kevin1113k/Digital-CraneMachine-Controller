@@ -8,7 +8,7 @@
 
 - 中繼同時提供手機網頁（`public/`）
 - PC 是主動連出去，現場**不用開 port、不用設路由器、不用固定 IP**，只要 PC 能上網
-- 中繼只轉送訊息，遊戲邏輯都在 Unity；協定見 [../docs/RemoteProtocol.md](../docs/RemoteProtocol.md)
+- 中繼只轉送訊息，遊戲邏輯都在 Unity；協定見 [PROTOCOL.md](PROTOCOL.md)
 - 支援多台機台：每台用不同的機台 ID（手機網址 `?m=<機台ID>`）
 
 ## 手機操作
