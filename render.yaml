@@ -1,0 +1,14 @@
+# Render.com 一鍵部署 (Blueprint)。MACHINE_KEY 會自動產生，部署後到 Dashboard 複製填入 Unity 的 relayKey
+services:
+  - type: web
+    name: crane-relay
+    runtime: node
+    plan: starter
+    buildCommand: npm ci --omit=dev
+    startCommand: node server.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: MACHINE_KEY
+        generateValue: true
+      - key: DEFAULT_MACHINE
+        value: crane01

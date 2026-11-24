@@ -1,0 +1,18 @@
+{
+  "name": "crane-web-controller",
+  "version": "1.0.0",
+  "private": true,
+  "description": "數位夾娃娃機 手機遙控 + 雲端中繼伺服器",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/relay-test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "qrcode-generator": "^1.5.2",
+    "ws": "^8.23.0"
+  }
+}

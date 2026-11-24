@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#120f1d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>數位夾娃娃機</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">DIGITAL <b>CRANE</b></div>
+    <div class="conn"><span id="ping"></span><i id="connDot" class="dot"></i></div>
+  </header>
+
+  <div id="banner" class="banner hide"></div>
+
+  <!-- 連線中 -->
+  <section id="scr-connect" class="screen active">
+    <div class="spinner"></div>
+    <p class="muted">連線中…</p>
+  </section>
+
+  <!-- QR Code -->
+  <section id="scr-qr" class="screen">
+    <div class="chip" id="machineChip">機台狀態</div>
+    <h1>掃描開始遊戲</h1>
+    <div class="qr-card">
+      <div id="qr" class="qr"></div>
+      <div class="token" id="tokenText">------</div>
+    </div>
+    <ol class="steps">
+      <li>把手機<b>亮度調高</b></li>
+      <li>將 QR Code 對準機台上的<b>攝影機</b></li>
+      <li>掃描成功後，這裡會變成遙控器</li>
+    </ol>
+    <p class="muted small" id="expireText"></p>
+  </section>
+
+  <!-- 遙控 -->
+  <section id="scr-play" class="screen">
+    <div class="hud">
+      <div class="timer"><span id="timeLeft">30</span><small>秒</small></div>
+      <div class="hud-right">
+        <div class="badge hide" id="roundBadge">第 1 次</div>
+        <div class="phase" id="phaseText">移動爪子</div>
+      </div>
+    </div>
+
+    <div class="side">
+      <span class="muted small">我站在機台的</span>
+      <div class="seg" id="sideSeg">
+        <button data-side="0" class="on">正面</button>
+        <button data-side="1">右側</button>
+        <button data-side="2">背面</button>
+        <button data-side="3">左側</button>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="stick" id="stick">
+        <div class="stick-ring"></div>
+        <span class="arrow up"></span><span class="arrow right"></span><span class="arrow down"></span><span class="arrow left"></span>
+        <div class="knob" id="knob"></div>
+      </div>
+      <div class="buttons">
+        <button class="btn-drop" id="btnDrop"><span>下爪</span></button>
+        <button class="btn-grab" id="btnGrab" disabled>收爪</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 結果 -->
+  <section id="scr-result" class="screen">
+    <div class="result-icon" id="resultIcon">🎉</div>
+    <h1 id="resultTitle">恭喜！</h1>
+    <p id="resultText" class="muted"></p>
+    <button class="btn-primary" id="btnAgain">再玩一次</button>
+  </section>
+
+  <!-- 再來一次 -->
+  <div id="retry" class="overlay hide">
+    <div class="overlay-card">
+      <div class="result-icon">💪</div>
+      <h2>沒夾到！再來一次</h2>
+      <p class="muted" id="retryText"></p>
+    </div>
+  </div>
+</div>
+<script src="vendor/qrcode.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
