@@ -348,7 +348,7 @@
       setPlayUi();
     }
   });
-  $('btnAgain').addEventListener('click', () => {
+  $('btnAgain').addEventListener('pointerup', () => {
     token = newToken();
     myState = 'idle';
     show('connect');
@@ -384,7 +384,18 @@
   function vibrate(p) { try { navigator.vibrate && navigator.vibrate(p); } catch {} }
   async function keepAwake() { try { if ('wakeLock' in navigator && !wakeLock) wakeLock = await navigator.wakeLock.request('screen'); } catch {} }
   function releaseWake() { try { wakeLock && wakeLock.release(); } catch {} wakeLock = null; }
-  document.addEventListener('gesturestart', e => e.preventDefault());
+  // ---- 防止連按 / 雙指造成網頁放大 (iOS Safari 會忽略 user-scalable=no)
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', e => {
+    const now = Date.now();
+    if (now - lastTouchEnd < 400) e.preventDefault();   // 快速第二下 = 瀏覽器會當成「點兩下放大」
+    lastTouchEnd = now;
+  }, { passive: false });
+  document.addEventListener('touchmove', e => { if (e.touches.length > 1 || (e.scale && e.scale !== 1)) e.preventDefault(); }, { passive: false });
+  document.addEventListener('dblclick', e => e.preventDefault(), { passive: false });
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, e => e.preventDefault(), { passive: false }));
+  // 萬一已經被放大 (例如舊版頁面殘留)，轉向/尺寸變動時重新排版
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', () => layout());
 
   connect();
   keepAwake();
